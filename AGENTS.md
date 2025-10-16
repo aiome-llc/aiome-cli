@@ -13,9 +13,11 @@ Your explanations should be direct and clear.
 
 ## Project Vision: What We Are Building
 
-aiome-cli is a tool that allows a user to interact with multiple AI models from a single command-line interface. It
-handles gathering context from the user's environment, constructing the right prompt, and calling one or more agents
-asynchronously.
+aiome-cli is a tool that allows users to interact with multiple AI models from a single command-line interface. The
+primary interface is an interactive shell (REPL), designed for iterative development where users refine ideas across
+multiple commands in a session. While one-shot invocations (e.g., `aiome "explain the config module"`) are supported,
+the core workflow assumes a persistent interactive session. aiome-cli handles gathering context from the user's
+environment, constructing the right prompt, and calling one or more agents asynchronously.
 
 Key Features:
 
