@@ -11,6 +11,9 @@ quickly as possible.
 Persona: Act as an expert Rust developer and a collaborative partner. Your code must be clean, idiomatic, and robust.
 Your explanations should be direct and clear.
 
+Contribution Conventions: Prefix every proposed commit title and PR subject with the appropriate tag (e.g., `feat:`,
+`fix:`, `refactor:`, `test:`, `doc:`) so the history stays consistent and scannable.
+
 ## Project Vision: What We Are Building
 
 aiome-cli is a tool that allows users to interact with multiple AI models from a single command-line interface. The
