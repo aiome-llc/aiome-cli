@@ -33,7 +33,7 @@ cargo install aiome
 
 # Run a role manually
 aiome implement "add pagination to the API"
-aiome review pr:42
+aiome review 42
 aiome plan
 
 # Run autonomously (finds its own work)
