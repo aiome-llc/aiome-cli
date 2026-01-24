@@ -358,7 +358,7 @@ When running as a swarm (`aiome swarm start`), multiple agents operate in parall
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    SWARM CONTROLLER                      │
+│                    SWARM CONTROLLER                     │
 ├─────────────────────────────────────────────────────────┤
 │  plan --auto              (runs periodically)           │
 │  implement --auto --loop  (N instances, continuous)     │
