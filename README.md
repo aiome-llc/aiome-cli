@@ -56,7 +56,7 @@ Treat these as a vocabulary, not a contract.
 This is the current layout and may evolve:
 
 ```
-aiome-cli/
+repo-root/
 ├── Cargo.toml
 ├── src/
 │   └── main.rs
