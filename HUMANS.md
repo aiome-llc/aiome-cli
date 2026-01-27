@@ -26,7 +26,7 @@ cargo run
 cargo install --path .
 ```
 
-This starts a prompt. Type a line, it echoes back. Use Ctrl+D to exit.
+This starts a prompt. Type a line, it echoes back. Use Ctrl+D (Unix/Linux/macOS) or Ctrl+Z then Enter (Windows) to exit.
 
 ## Where to Look Next
 
