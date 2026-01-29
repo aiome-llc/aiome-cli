@@ -154,7 +154,7 @@ These ideas synthesize:
 
 - **Complexity science**: Emergence, self-organization (Santa Fe Institute)
 - **Bounded rationality**: Cognitive limits, satisficing (Simon)
-- **Stigmergy**: Coordination through environment (Grassé, Wikipedia)
+- **Stigmergy**: Coordination through environment (Grassé)
 - **Agile/XP**: Small batches, iteration, test-first (Beck)
 
 The pattern keeps being rediscovered because it works.
