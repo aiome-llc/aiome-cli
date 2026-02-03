@@ -84,6 +84,35 @@ Bounded rationality isn't a bug. It's the nature of finite computation.
 
 ---
 
+## Cognitive Scaffolding as Runtime
+
+A boundedly rational agent needs external memory. Not as a suggestion—as infrastructure.
+
+```
+Context window = RAM (volatile, limited)
+Filesystem     = Disk (persistent, unlimited)
+
+Anything important gets written to disk.
+```
+
+This pattern—persistent markdown files as working memory—was popularized by Manus and open-sourced as
+[planning-with-files](https://github.com/OthmanAdi/planning-with-files). But in those implementations it's a convention
+enforced by prompt engineering. The agent is *asked* to write checkpoints. It can forget. It can ignore the nudge.
+
+In Aiome, cognitive scaffolding is the **runtime contract**:
+
+- Every agent gets a managed workspace: plan, findings, scratch
+- Checkpoints are enforced by the runtime, not requested by prompts
+- Predictions are externalized *before* action
+- Recovery after context loss is automatic, not manual
+
+```
+planning-with-files:  "Please remember to write to disk"
+Aiome:                flush_to_disk() is called by the runtime
+```
+
+---
+
 ## Artifact-Centric Design
 
 **The artifact encodes what matters about the process that created it.**
@@ -126,17 +155,21 @@ mirrors how human teams with different backgrounds collaborate.
 
 ## Scaling
 
-The pattern scales:
+The pattern scales because it's the same pattern at every level:
 
 ```
-Personal  → Your agents help you code
-Team      → Agents coordinate across a team
-Org       → Agents coordinate across an organization
-...       → Same pattern, larger scale
+Personal  → Your agents, local scaffolding, your repo
+Team      → Shared workspace, event logs, team repo
+Org       → Multiple repos, shared aiome.toml conventions
+Ecosystem → Packages, published artifacts, open source
 ```
 
-Each level has different time constants and artifacts, but the same core: bounded agents, stigmergic coordination,
-emergent capability.
+Each level has different time constants, different artifacts, and different coordination substrates. But the kernel is
+identical: bounded agents, externalized state, stigmergic coordination, emergent capability.
+
+The scaling works because no level needs to understand the levels above or below it. An agent checkpointing to disk
+doesn't know about GitHub. A PR reviewer doesn't know about the agent's scratch files. Layered abstraction, not
+omniscient orchestration.
 
 ---
 
@@ -156,8 +189,10 @@ These ideas synthesize:
 - **Bounded rationality**: Cognitive limits, satisficing (Simon)
 - **Stigmergy**: Coordination through environment (Grassé)
 - **Agile/XP**: Small batches, iteration, test-first (Beck)
+- **Context engineering**: Filesystem as working memory (Manus)
 
-The pattern keeps being rediscovered because it works.
+The pattern keeps being rediscovered because it works. Aiome's contribution is making scaffolding a runtime guarantee
+rather than a prompting convention, and extending it to agent collectives.
 
 ---
 
