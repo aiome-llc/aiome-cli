@@ -49,6 +49,12 @@ The pattern is fractal:
 
 Each level compresses computation into artifacts. Each artifact becomes input for the next level.
 
+LLMs can't solve arbitrarily complex problems in one pass. We don't fight this—we design for it. Decompose until each
+piece fits. Verify with external tools, not LLM judgment. Iterate rather than expecting one-shot perfection. Distribute
+across agents with diverse perspectives.
+
+Bounded rationality isn't a bug. It's the nature of finite computation.
+
 ---
 
 ## Stigmergy, Not Debate
@@ -67,20 +73,10 @@ Why stigmergy over direct communication?
 3. **Decoupling**: Any model can fill any role.
 4. **Proven**: This is how open source actually works.
 
+The code contains what matters. Verification happens on artifacts, not process. The debates that produced them can be
+discarded.
+
 The repository is the pheromone trail.
-
----
-
-## Bounded Rationality as Feature
-
-LLMs can't solve arbitrarily complex problems in one pass. We don't fight this. We design for it:
-
-- **Decompose** until each piece fits the context window
-- **Verify** with external tools (tests, linters), not LLM judgment
-- **Iterate** rather than expecting one-shot perfection
-- **Distribute** across multiple agents with diverse perspectives
-
-Bounded rationality isn't a bug. It's the nature of finite computation.
 
 ---
 
@@ -113,16 +109,36 @@ Aiome:                flush_to_disk() is called by the runtime
 
 ---
 
-## Artifact-Centric Design
+## Memory Hierarchy
 
-**The artifact encodes what matters about the process that created it.**
+Two layers. No more.
 
-- 50,000 reasoning tokens → 10-token answer
-- Weeks of commits → merged codebase
+**Working memory**: Markdown files on disk. Task plans, scratch pads, findings. Ephemeral, per-agent, enforced by the
+runtime. The Manus pattern, hardened.
 
-The process is scaffolding. The artifact persists. Verification happens on artifacts, not process.
+**Episodic memory**: The Git repository. Commits record what happened. Issues record what needs doing. PRs record
+completed work. Reviews record multi-agent critique. Merges record consensus.
 
-This is why stigmergy works: the code contains what matters. The debates that produced it can be discarded.
+Every Git primitive is already a memory primitive:
+
+| Git Primitive  | Memory Function           |
+|----------------|---------------------------|
+| Commit         | What happened             |
+| `git log`      | Shared timeline           |
+| `log --author` | Per-agent episodic recall |
+| Issue          | Task queue                |
+| PR             | Compressed work unit      |
+| Review         | Multi-agent coordination  |
+| Merge          | Verified consensus        |
+| Commit message | Compressed observation    |
+
+We don't reinvent these. We use them.
+
+The apparent clumsiness of GitHub as a coordination substrate—API latency, issue overhead, PR ceremony—is a feature. It
+forces work into discrete, verifiable, reviewable units. The friction is the quality mechanism.
+
+Git was already a stigmergic coordination system for boundedly rational agents. Those agents were humans. We're adding
+new species to the existing ecosystem.
 
 ---
 
