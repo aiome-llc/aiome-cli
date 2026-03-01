@@ -48,7 +48,7 @@ structure. No LLM needed. See the design doc’s "CLI" section for the phased bu
 cargo run                   # Start the REPL
 cargo test                  # Run tests (none yet)
 cargo fmt                   # Format code
-cargo clippy                # Lint
+cargo clippy --all-targets --all-features -- -D warnings  # Lint (matches CI)
 cargo install --path .      # Install locally as `aiome`
 ```
 

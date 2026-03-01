@@ -6,10 +6,10 @@ AI coding agents are boundedly rational. Finite context windows, no memory acros
 project's architecture or history. The current solution is hand-written context files — CLAUDE.md, .cursorrules,
 AGENTS.md — that encode project knowledge in a format agents can consume at session start.
 
-This works at small scale. A 1,000-line project fits in a single file. A 100,000-line project does not. Vasilopoulos
-(2026) documents what happens next: you end up building a three-tier knowledge hierarchy by hand — a constitution loaded
-every session, 19 specialized agent specs, 34 subsystem documents — totaling 26,000 lines maintained at 1-2 hours per
-week, with stale specs as the primary failure mode.
+This works at small scale. A 1,000-line project fits in a single file. A 100,000-line project does not.
+[Vasilopoulos (2026)](https://arxiv.org/abs/2602.20478) documents what happens next: you end up building a three-tier
+knowledge hierarchy by hand — a constitution loaded every session, 19 specialized agent specs, 34 subsystem documents —
+totaling 26,000 lines maintained at 1-2 hours per week, with stale specs as the primary failure mode.
 
 That hierarchy is correct. The manual maintenance is not sustainable.
 
