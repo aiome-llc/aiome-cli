@@ -4,34 +4,35 @@ Welcome. This document is for humans who want a quick, honest overview.
 
 ## What is Aiome?
 
-Aiome is an early-stage CLI exploring how multiple AI agents could collaborate on software work. The long-term vision is
-role-based agents coordinating through artifacts like code, tests, and issues. The current reality is much smaller.
+Aiome is a CLI that automatically generates, maintains, and serves multi-scale knowledge about a codebase — so that AI
+agents get exactly the right context for any task.
+
+The core idea: AI agents have limited context windows and no memory between sessions. Hand-written context files
+(CLAUDE.md, .cursorrules) work for small projects but don’t scale. Aiome analyzes your codebase’s structure, identifies
+natural subsystem boundaries, generates knowledge at multiple resolutions, and serves the right resolution for each
+task.
 
 ## Current State
 
-Right now the CLI is a simple REPL that echoes input. That’s it. Anything beyond that is a direction, not a promise.
+Early stage. The CLI is a REPL that echoes input. The architecture is designed
+([docs/design-doc.md](./docs/design-doc.md)) but not yet implemented. Next step is Phase 1: static and temporal
+coupling analysis.
 
-## Why It Exists
-
-We want to see if a small set of lightweight principles can help AI agents do useful work without heavy process. We
-expect the project structure to evolve based on real usage.
-
-## Quick Start (Today)
+## Quick Start
 
 ```bash
-# Run locally
-cargo run
-
-# Or install locally
-cargo install --path .
+cargo run                   # Start the REPL
+cargo install --path .      # Or install locally as `aiome`
 ```
 
-This starts a prompt. Type a line, it echoes back. Use Ctrl+D (Unix/Linux/macOS) or Ctrl+Z then Enter (Windows) to exit.
+Ctrl+D to exit.
 
-## Where to Look Next
+## Where to Look
 
-- **README.md**: Direction for agents and contributors
-- **src/main.rs**: The current CLI entry point
+- **[README.md](./README.md)** — Project constitution (conventions, commands, repo layout)
+- **[docs/design-doc.md](./docs/design-doc.md)** — Architecture: Analyze → Generate → Serve
+- **[docs/vision.md](./docs/vision.md)** — Foundational ideas (BRAIN pattern, stigmergy, cognitive scaffolding)
+- **src/main.rs** — The current CLI entry point
 
 ## The Name
 
