@@ -230,10 +230,10 @@ satisfice, a limited constitution forces the system to compress.
 **Input:** Task description (natural language, file paths, or both).  
 **Output:** Adaptive context package at the right resolution, trimmed to task-level relevance.
 
-The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes the
-task's entanglement with the codebase, loads context proportional to that entanglement, and then *trims within specs*
-based on section-level relevance to the specific task. This adaptive bond dimension is the key difference from a naive
-tier-loading approach.
+The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes
+the task's entanglement with the codebase, loads context proportional to that entanglement, and then *trims within
+specs* based on section-level relevance to the specific task. This adaptive bond dimension is the key difference from a
+naive tier-loading approach.
 
 **Partition routing.** When file paths are provided, partition mapping is direct (glob patterns in the routing table).
 When only a natural language description is given, keyword matching against partition names and spec content provides
@@ -307,11 +307,12 @@ The same system, different resolutions and different *sections* for different ta
 on what matters — not just at the partition level, but at the section level within each spec.
 
 **Task-conditioned partition overlay.** For tasks that span partition boundaries, the serve phase can dynamically merge
-or split the static partition structure. If a task description spans two partitions that are adjacent in the entanglement graph, serve loads a combined view. If a task is entirely internal to a large partition, serve uses the Scale 1 file
-summaries and intra-partition entanglement to load only the relevant sub-cluster. The static partitions from the Analyze
-phase are the default, but the serve phase adapts them per-task using a lightweight re-weighting of the entanglement map
-edges based on the task's semantic overlap. This runs in milliseconds — it doesn't recompute the full partition
-structure, just adjusts which boundaries are "active" for this task.
+or split the static partition structure. If a task description spans two partitions that are adjacent in the
+entanglement graph, serve loads a combined view. If a task is entirely internal to a large partition, serve uses the
+Scale 1 file summaries and intra-partition entanglement to load only the relevant sub-cluster. The static partitions
+from the Analyze phase are the default, but the serve phase adapts them per-task using a lightweight re-weighting of the
+entanglement map edges based on the task's semantic overlap. This runs in milliseconds — it doesn't recompute the full
+partition structure, just adjusts which boundaries are "active" for this task.
 
 **Output formats:** The same hierarchy, multiple delivery formats:
 
@@ -433,8 +434,8 @@ phases rather than hand-written routing tables.
 
 **Task routing.** Given a task description, orchestrate determines which agent is best suited (based on agent
 capabilities, task type, and historical success rates from the learn phase), generates an adaptive context package, and
-dispatches the task. For tasks that span multiple partitions or require multiple perspectives, orchestrate can fan out to
-multiple agents in parallel, each receiving context tailored to their portion of the work.
+dispatches the task. For tasks that span multiple partitions or require multiple perspectives, orchestrate can fan out
+to multiple agents in parallel, each receiving context tailored to their portion of the work.
 
 **Agent coordination.** When multiple agents work on related tasks, orchestrate ensures they receive consistent context
 — the same partition specs, the same invariants — so their outputs are compatible. The entanglement map drives this:
