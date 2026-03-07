@@ -20,9 +20,9 @@ right agent for the right task.
 ## Why This Design Works
 
 The knowledge hierarchy isn't an arbitrary organizational choice. It's a consequence of how codebases are structured and
-how bounded agents consume information. The companion paper *Linearland* proves that any intelligent agent operating in
-an environment with local interactions faces a finite optimal context size — adding more information beyond this bound
-actively degrades performance. For codebases, this means the hierarchy is *necessary*, not merely convenient.
+how bounded agents consume information. There is a finite optimal context size for any agent operating in an environment
+with local interactions — adding more information beyond this bound actively degrades performance. For codebases, this
+means the hierarchy is *necessary*, not merely convenient.
 
 **Codebases have entanglement structure.** Some files are tightly coupled — they share types, change together, fail
 together. Others are nearly independent. This structure determines what an agent needs to know: if you're modifying a
@@ -33,8 +33,9 @@ relevant to which task.
 **Agents need knowledge at the right resolution.** A simple task in an isolated module needs a thin context: project
 conventions and the module's interface. A complex task in a highly entangled domain needs a thick context: the full
 theory of the domain, the cross-module interactions, the known failure modes. Loading too little context causes
-mistakes. Loading too much wastes the context window on irrelevant information and can confuse the agent — this is the
-irrelevant operator noise from the no-go theorem. The right amount depends on the task's entanglement with the codebase.
+mistakes. Loading too much wastes the context window on irrelevant information and can actively degrade the agent's
+performance — beyond an optimal context size, additional inputs act like noise that dilutes useful signal. The right
+amount depends on the task's entanglement with the codebase.
 
 **Knowledge at different scales preserves different things.** This is the renormalization group applied to code. At each
 scale, "irrelevant operators" are integrated out and only "relevant operators" survive:
@@ -183,8 +184,7 @@ partition, the Scale 2 subsystem spec tells it about the boundary, but says noth
 5,000-line partition with 20 files has its own entanglement structure — some files are tightly coupled internally (the
 state machine and the event handler), others are relatively independent (the serialization layer and the utilities).
 File summaries give the serve phase an intermediate resolution to draw from, so agents working on the state machine can
-load
-summaries for coupled internal files without loading the entire partition.
+load summaries for coupled internal files without loading the entire partition.
 
 **Scale 2 — Subsystem specs.** One per partition. For each partition, the LLM reads the constituent files (guided by
 their Scale 1 summaries) and generates a spec that captures:
@@ -261,8 +261,8 @@ Task entanglement:   high (0.88)
 Context package:
   ✓ Scale 4: constitution.md                            (847 lines)
   ✓ Scale 3: networking-domain.md                       (915 lines)
-  ✓ Scale 2: combat-system.md [trimmed: invariants,     (283 lines)
-              failure modes, couplings sections only]
+  ✓ Scale 2: combat-system.md [trimmed: invariants,
+              failure modes, couplings sections only]   (283 lines)
   ✓ Scale 2: deterministic-rng.md                       (283 lines)
   ✓ Scale 1: networking/serializer.rs summary           (6 lines)
   ✓ Scale 1: combat/damage_calc.rs summary              (5 lines)
@@ -279,8 +279,8 @@ Task entanglement:   low (0.31)
   ↓
 Context package:
   ✓ Scale 4: constitution.md                            (847 lines)
-  ✓ Scale 2: ui-components.md [trimmed: interfaces      (134 lines)
-              section only]
+  ✓ Scale 2: ui-components.md [trimmed: interfaces
+              section only]                             (134 lines)
   Total: ~980 lines
 ```
 
