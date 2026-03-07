@@ -7,7 +7,7 @@ project's architecture or history. The current solution is hand-written context 
 AGENTS.md — that encode project knowledge in a format agents can consume at session start.
 
 This works at small scale. A 1,000-line project fits in a single file. A 100,000-line project does not.
-[Vasilopoulos (2026)](https://arxiv.org/abs/2602.20478) documents what happens next: you end up building a three-tier
+[Vasilopoulos (2026)](https://arxiv.org/abs/2602.20478) documents what happens next: you end up building a multi-tier
 knowledge hierarchy by hand — a constitution loaded every session, 19 specialized agent specs, 34 subsystem documents —
 totaling 26,000 lines maintained at 1-2 hours per week, with stale specs as the primary failure mode.
 
@@ -20,7 +20,9 @@ right agent for the right task.
 ## Why This Design Works
 
 The knowledge hierarchy isn't an arbitrary organizational choice. It's a consequence of how codebases are structured and
-how bounded agents consume information.
+how bounded agents consume information. There is a finite optimal context size for any agent operating in an environment
+with local interactions — adding more information beyond this bound actively degrades performance. For codebases, this
+means the hierarchy is *necessary*, not merely convenient.
 
 **Codebases have entanglement structure.** Some files are tightly coupled — they share types, change together, fail
 together. Others are nearly independent. This structure determines what an agent needs to know: if you're modifying a
@@ -31,15 +33,29 @@ relevant to which task.
 **Agents need knowledge at the right resolution.** A simple task in an isolated module needs a thin context: project
 conventions and the module's interface. A complex task in a highly entangled domain needs a thick context: the full
 theory of the domain, the cross-module interactions, the known failure modes. Loading too little context causes
-mistakes. Loading too much wastes the context window on irrelevant information and can confuse the agent. The right
+mistakes. Loading too much wastes the context window on irrelevant information and can actively degrade the agent's
+performance — beyond an optimal context size, additional inputs act like noise that dilutes useful signal. The right
 amount depends on the task's entanglement with the codebase.
 
-**Knowledge at different scales preserves different things.** A subsystem spec preserves interfaces, invariants, and
-failure modes while discarding implementation details. A domain spec preserves cross-subsystem theory while discarding
-single-subsystem internals. A constitution preserves universal conventions while discarding everything domain-specific.
+**Knowledge at different scales preserves different things.** This is the renormalization group applied to code. At each
+scale, "irrelevant operators" are integrated out and only "relevant operators" survive:
+
+| Scale transition | What's preserved (relevant)                     | What's integrated out (irrelevant) |
+|------------------|-------------------------------------------------|------------------------------------|
+| 0 → 1            | Function signatures, types, intent per file     | Implementation details, formatting |
+| 1 → 2            | Subsystem interfaces, invariants, failure modes | Individual file internals          |
+| 2 → 3            | Cross-subsystem interactions, domain theory     | Single-subsystem details           |
+| 3 → 4            | Universal conventions, routing rules            | Domain-specific knowledge          |
+
 Each level compresses aggressively, keeping only what matters for decisions at that scale. This is the same principle
 that makes scientific models work: you don't need quantum mechanics to design a bridge, but you do need it to design a
 transistor. The resolution must match the problem.
+
+**The bond dimension should be adaptive.** The entanglement between a task and the codebase is not constant — a simple
+timeout fix in the networking module has low entanglement, while debugging a distributed state desync has high
+entanglement, even though both touch the same partition. The optimal amount of context (the "bond dimension" at the
+boundary between agent and codebase) should vary with the task, not just with the partition. Aiome's serve phase adapts
+context not just by routing to partitions, but by trimming within specs based on task-level relevance.
 
 **The hierarchy maintains itself through boundary detection.** Not every code change requires a knowledge update. An
 internal refactor that preserves all interfaces doesn't change what external agents need to know — the boundary is
@@ -47,20 +63,27 @@ intact. A one-line type change that breaks a cross-module invariant does — the
 *boundary-relevant* changes rather than *any* changes, the maintenance cost drops from "update specs whenever code
 changes" to "update specs when interfaces or invariants change." Most commits don't cross boundaries.
 
+**The coarse-graining improves through feedback.** The initial knowledge hierarchy is generated using generic heuristics
+about what agents need. Over time, agent session logs reveal what *actually* matters: which spec sections correlate with
+task success, which are loaded but never used, which gaps cause repeated failures. This feedback loop is the variational
+optimization of the RG flow — tuning the coarse-graining to maximize downstream task performance, not just linguistic
+coherence.
+
 ## Architecture
 
-Three phases, each independently valuable:
+Five phases, each independently valuable:
 
 ```
-ANALYZE ──→ GENERATE ──→ SERVE
-  │              │             │
-  │  no LLM      │  LLM        │  no LLM (usually)
-  │  seconds     │  minutes    │  milliseconds
-  │  every run   │  on init    │  every session
-  │              │  + drift    │
-  ▼              ▼             ▼
-Entanglement   Knowledge     Context
-map            hierarchy     packages
+ANALYZE ──→ GENERATE ──→ SERVE ──→ LEARN ──→ ORCHESTRATE
+  │              │             │          │          │
+  │  no LLM      │  LLM        │  LLM opt │  LLM opt │  LLM
+  │  seconds     │  minutes    │  ms      │  async   │  per task
+  │  every run   │  on init    │  every   │  every   │  on
+  │              │  + drift    │  session │  session │  demand
+  ▼              ▼             ▼          ▼          ▼
+Entanglement   Knowledge     Adaptive   Spec quality  Task
+map +          hierarchy     context    scores +      routing +
+partitions     (5 scales)    packages   feedback      agents
 ```
 
 ### Analyze
@@ -96,29 +119,29 @@ utility module with a clean interface has low entanglement. The networking layer
 and UI has high entanglement. This score determines how much knowledge the partition needs at its boundary.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│              Entanglement Map (example)                 │
-│                                                         │
-│   ┌─────────┐         ┌─────────┐                       │
-│   │   UI    │─ ─ ─ ─ ─│  Auth   │     weak coupling     │
-│   │  (0.31) │         │  (0.44) │                       │
-│   └────┬────┘         └─────────┘                       │
-│        │                                                │
-│   ┌────┴────┐   ══════╗                                 │
-│   │  Game   │═════════║═══╗                             │
-│   │  State  │   ║     ║   ║    strong coupling          │
-│   │  (0.78) │   ║  ┌──╨───╨───┐                         │
-│   └─────────┘   ║  │Networking│                         │
-│                 ║  │  (0.91)  │                         │
-│            ┌────╨──┴──┐       │                         │
-│            │   RNG    │───────┘                         │
-│            │  (0.85)  │                                 │
-│            └──────────┘                                 │
-│                                                         │
-│  Scores = entanglement with rest of codebase            │
-│  ═══ = high mutual information (need domain specs)      │
-│  ─ ─ = low mutual information (subsystem specs suffice) │
-└─────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│              Entanglement Map (example)                    │
+│                                                            │
+│   ┌─────────┐         ┌─────────┐                          │
+│   │   UI    │─ ─ ─ ─ ─│  Auth   │     weak coupling        │
+│   │  (0.31) │         │  (0.44) │                          │
+│   └────┬────┘         └─────────┘                          │
+│        │                                                   │
+│   ┌────┴────┐═════════╗                                    │
+│   │  Game   │═════════║═══╗                                │
+│   │  State  │   ║     ║   ║    strong coupling             │
+│   │  (0.78) │   ║  ┌──╨───╨───┐                            │
+│   └─────────┘   ║  │Networking│                            │
+│                 ║  │  (0.91)  │                            │
+│            ┌────╨──┴──┐       │                            │
+│            │   RNG    │───────┘                            │
+│            │  (0.85)  │                                    │
+│            └──────────┘                                    │
+│                                                            │
+│  Scores = entanglement with rest of codebase               │
+│  ═══ = high mutual information (need Scale 3 domain specs) │
+│  ─ ─ = low mutual information (Scale 2 specs suffice)      │
+└────────────────────────────────────────────────────────────┘
 ```
 
 **Implementation:** tree-sitter for AST parsing, git2 for history analysis, petgraph for graph algorithms. All Rust, all
@@ -128,12 +151,43 @@ visualizer even without the rest of the system.
 ### Generate
 
 **Input:** Partition structure + entanglement scores.  
-**Output:** Complete knowledge hierarchy.
+**Output:** Knowledge hierarchy (Scales 1–4; Scale 0 is the raw source code itself).
 
-This phase requires an LLM. It's the expensive step, run once on init and incrementally on drift.
+This phase requires an LLM. It's the expensive step, run once on init and incrementally on drift. The hierarchy follows
+the renormalization group convention: Scale 0 is the finest resolution (raw code), and each higher scale integrates out
+more detail, preserving only what's relevant for decisions at that scale.
 
-**Tier 3 — Subsystem specs.** One per partition. For each partition, the LLM reads the constituent files and generates a
-spec that captures:
+```
+Scale 0:  Raw source code            (every token of every file)
+Scale 1:  File-level summaries       (what each file does, its interfaces)
+Scale 2:  Subsystem specs            (how components interact, invariants)
+Scale 3:  Domain specs               (synthesized knowledge for high-entanglement domains)
+Scale 4:  Project constitution       (universal conventions, routing table)
+```
+
+Generation proceeds bottom-up: Scale 1 first (each file independently, fully parallelizable), then Scale 2 (reads
+constituent files + their Scale 1 summaries), then Scale 3 (reads relevant Scale 2 specs), then Scale 4 (reads
+everything). On first run, human review of generated specs is strongly recommended — the first pass has no feedback
+signal on what agents actually need.
+
+**Scale 1 — File-level summaries.** One per source file. For each file, the LLM generates a brief summary (one
+paragraph, typically 3-8 lines) capturing:
+
+- **Purpose:** What does this file do in one sentence?
+- **Key interfaces:** The public functions, types, or traits it exposes.
+- **Internal dependencies:** Which other files within the same partition it couples to, and how.
+- **Gotchas:** Anything non-obvious — implicit ordering requirements, unsafe blocks, performance-sensitive paths.
+
+File summaries are the cheapest scale level to generate (short context per call, highly parallelizable) and the cheapest
+to maintain (regenerate only when the file itself changes). They fill a critical gap: when an agent is working *inside*
+a partition, the Scale 2 subsystem spec tells it about the boundary, but says nothing about the internal structure. A
+5,000-line partition with 20 files has its own entanglement structure — some files are tightly coupled internally (the
+state machine and the event handler), others are relatively independent (the serialization layer and the utilities).
+File summaries give the serve phase an intermediate resolution to draw from, so agents working on the state machine can
+load summaries for coupled internal files without loading the entire partition.
+
+**Scale 2 — Subsystem specs.** One per partition. For each partition, the LLM reads the constituent files (guided by
+their Scale 1 summaries) and generates a spec that captures:
 
 - **Interfaces:** What does this subsystem expose? Function signatures, types, API contracts.
 - **Invariants:** What must always be true? Extracted from assertions, test expectations, comments, and inferred from
@@ -146,20 +200,20 @@ The generation prompt embodies a specific principle: *extract the minimal repres
 ability to make correct decisions when working on adjacent code.* This is not "summarize the code." It's "what would a
 competent new team member need to know to safely modify this subsystem without breaking anything downstream?"
 
-**Tier 2 — Domain specs.** One per high-entanglement partition. When a partition's entanglement score exceeds a
-threshold, a subsystem spec isn't rich enough. The networking subsystem that interacts with persistence, RNG, combat,
-and UI needs a *domain model* — a coherent theory that synthesizes across multiple subsystem specs:
+**Scale 3 — Domain specs.** One per high-entanglement cluster. When a group of partitions are strongly coupled, their
+individual Scale 2 specs aren't rich enough — an agent working near their boundary needs the *theory* of how they
+interact. A domain spec synthesizes across multiple subsystem specs:
 
 - The full domain theory (e.g., "all combat state must be deterministic; here's why and how")
 - Cross-subsystem interaction patterns
 - Accumulated symptom → cause → fix tables
 - Pre-synthesized views that would otherwise require loading 4-5 subsystem specs
 
-The threshold for promotion from Tier 3 to Tier 2 is the entanglement score. High entanglement means the partition's
-boundary carries more information — agents working near it need richer context. The threshold is a tunable parameter (
-default ~0.7), but the principle is fixed: richer boundary for more entangled partitions.
+The threshold for promotion from Scale 2 to Scale 3 is the entanglement score. High entanglement means the partition
+cluster's boundary carries more information — agents working near it need richer context. The threshold is a tunable
+parameter (default ~0.7), but the principle is fixed: richer boundary for more entangled clusters.
 
-**Tier 1 — Constitution.** One per project. The most aggressive compression. From all specs and domain definitions,
+**Scale 4 — Constitution.** One per project. The most aggressive compression. From all specs and domain definitions,
 extract only what's universal:
 
 - Conventions that apply everywhere (naming, style, error handling patterns)
@@ -171,17 +225,32 @@ extract only what's universal:
 earn its place. This budget forces real prioritization — the same way a limited context window forces agents to
 satisfice, a limited constitution forces the system to compress.
 
-Generation proceeds bottom-up: Tier 3 first (each partition independently, parallelizable), then Tier 2 (reads relevant
-Tier 3 specs), then Tier 1 (reads everything). On first run, human review of generated specs is strongly recommended —
-the first pass has no feedback signal on what agents actually need.
-
 ### Serve
 
 **Input:** Task description (natural language, file paths, or both).  
-**Output:** Context package at the right resolution.
+**Output:** Adaptive context package at the right resolution, trimmed to task-level relevance.
 
-The serve phase is a routing algorithm. Given a task, it determines which partitions are involved, computes the task's
-entanglement with the codebase, and loads context proportional to that entanglement:
+The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes
+the task's entanglement with the codebase, loads context proportional to that entanglement, and then *trims within
+specs* based on section-level relevance to the specific task. This adaptive bond dimension is the key difference from a
+naive approach of loading entire scale levels.
+
+**Partition routing.** When file paths are provided, partition mapping is direct (glob patterns in the routing table).
+When only a natural language description is given, keyword matching against partition names and spec content provides
+the mapping. An LLM routing call is available as a fallback for ambiguous descriptions but is not the default path —
+it's too expensive for a fast operation.
+
+**Task-level entanglement scoring.** After identifying the touched partitions, the serve phase computes a *task-level*
+entanglement score — not just the partition's static score, but the specific task's coupling to each section of each
+relevant spec. A simple timeout fix in the networking module has low task-level entanglement (it only needs the socket
+interface section). Debugging a distributed state desync has high task-level entanglement (it needs the full domain
+theory, the determinism invariants, the cross-subsystem interaction patterns).
+
+The task-level scorer uses lightweight signals: keyword and embedding overlap between the task description and each
+section header/content of each spec. No LLM call required — the expensive LLM-generated spec is the knowledge; the
+cheap deterministic scorer selects which slices cross the boundary into the agent's context.
+
+**Adaptive context assembly.** The context package draws from all five scales, loading only what the task demands:
 
 ```
 Task: "fix the desync bug in combat damage"
@@ -190,11 +259,14 @@ Touched partitions:  combat, networking, rng
 Task entanglement:   high (0.88)
   ↓
 Context package:
-  ✓ Tier 1: constitution.md              (847 lines)
-  ✓ Tier 2: networking-domain.md         (915 lines)
-  ✓ Tier 3: combat-system.md             (412 lines)
-  ✓ Tier 3: deterministic-rng.md         (283 lines)
-  Total: 2,457 lines (~6,100 tokens)
+  ✓ Scale 4: constitution.md                            (847 lines)
+  ✓ Scale 3: networking-domain.md                       (915 lines)
+  ✓ Scale 2: combat-system.md [trimmed: invariants,
+              failure modes, couplings sections only]   (283 lines)
+  ✓ Scale 2: deterministic-rng.md                       (283 lines)
+  ✓ Scale 1: networking/serializer.rs summary           (6 lines)
+  ✓ Scale 1: combat/damage_calc.rs summary              (5 lines)
+  Total: ~2,340 lines
 ```
 
 vs.
@@ -206,18 +278,41 @@ Touched partitions:  ui
 Task entanglement:   low (0.31)
   ↓
 Context package:
-  ✓ Tier 1: constitution.md              (847 lines)
-  ✓ Tier 3: ui-components.md             (218 lines)
-  Total: 1,065 lines (~2,700 tokens)
+  ✓ Scale 4: constitution.md                            (847 lines)
+  ✓ Scale 2: ui-components.md [trimmed: interfaces
+              section only]                             (134 lines)
+  Total: ~980 lines
 ```
 
-The same system, different resolutions for different tasks. A simple task in an isolated module gets a thin context. A
-complex task in a tangled domain gets everything relevant. The agent's context window is spent on what matters.
+vs. a *within-partition* task that uses the new Scale 1:
 
-**Routing mechanics:** When file paths are provided, partition mapping is direct (glob patterns in the routing table).
-When only a natural language description is given, keyword matching against partition names and spec content provides
-the mapping. An LLM routing call is available as a fallback for ambiguous descriptions but is not the default path —
-it's too expensive for a fast operation.
+```
+Task: "refactor the event handler in the game state module"
+  ↓
+Touched partitions:  game-state (internal task)
+Task entanglement:   medium (0.52)
+  ↓
+Context package:
+  ✓ Scale 4: constitution.md                            (847 lines)
+  ✓ Scale 2: game-state.md [trimmed: interfaces,        (195 lines)
+              invariants sections]
+  ✓ Scale 1: game-state/event_handler.rs summary        (7 lines)
+  ✓ Scale 1: game-state/state_machine.rs summary        (6 lines)
+  ✓ Scale 1: game-state/transitions.rs summary          (5 lines)
+  (file summaries selected by intra-partition coupling)
+  Total: ~1,060 lines
+```
+
+The same system, different resolutions and different *sections* for different tasks. The agent's context window is spent
+on what matters — not just at the partition level, but at the section level within each spec.
+
+**Task-conditioned partition overlay.** For tasks that span partition boundaries, the serve phase can dynamically merge
+or split the static partition structure. If a task description spans two partitions that are adjacent in the
+entanglement graph, serve loads a combined view. If a task is entirely internal to a large partition, serve uses the
+Scale 1 file summaries and intra-partition entanglement to load only the relevant sub-cluster. The static partitions
+from the Analyze phase are the default, but the serve phase adapts them per-task using a lightweight re-weighting of the
+entanglement map edges based on the task's semantic overlap. This runs in milliseconds — it doesn't recompute the full
+partition structure, just adjusts which boundaries are "active" for this task.
 
 **Output formats:** The same hierarchy, multiple delivery formats:
 
@@ -269,19 +364,99 @@ shift during major refactors. A weekly re-analysis (cheap — it's the determini
 drift and flags when the partition structure no longer reflects the codebase's actual boundaries. Full re-partitioning
 is expensive (triggers regeneration) and should be explicit: `aiome init --reanalyze`.
 
+### Learn
+
+**Input:** Agent session logs (tool calls, files read, edits made, success/failure outcomes).  
+**Output:** Spec quality scores, gap detection, bond dimension tuning.
+
+The learn phase closes the loop from "generate specs based on what *should* matter" to "generate specs based on what
+*actually* matters." This is the variational optimization of the RG flow — tuning the coarse-graining to maximize
+downstream task performance.
+
+**Spec section scoring.** After every agent session, log which spec sections were loaded (from context package traces),
+which edits the agent made, and whether the task succeeded or failed. Over time, this builds a dataset of (spec section,
+task type, outcome) tuples. Sections that are frequently loaded but never correlated with success are candidates for
+compression or removal — they're wasting bond dimension on irrelevant operators. Sections that are rarely loaded but
+whose absence correlates with failures are candidates for promotion — they should be more prominent, or included at
+higher scales.
+
+**Gap detection.** When agents repeatedly fail on tasks in a partition *despite loading the full spec*, the spec is
+missing a relevant operator. The learn phase flags these partitions for targeted regeneration: "agents consistently fail
+at X when working in this partition — what knowledge is missing?" This can trigger an LLM call to regenerate the spec
+with a focused prompt, or flag for human review.
+
+**Empirical bond dimension tuning.** Track the relationship between context size and task success rate per partition. If
+agents succeed equally well with 200 lines of context vs. 900 lines for a given partition, the spec is over-specified —
+the serve phase should trim more aggressively. If success drops sharply below 500 lines, that's the empirical $C^*$ for
+that partition. Over time, the learn phase builds a per-partition profile of optimal context size, which the serve phase
+uses to calibrate its task-level trimming.
+
+**Partition quality feedback.** If agents consistently need to load specs from two partitions together, the entanglement
+weight between those partitions should increase — they may need a shared Scale 3 domain spec, or even a partition merge.
+If agents working in a large partition consistently only need a small subset of its files, the partition may be too
+coarse and should be split. The learn phase adjusts entanglement weights in the map (soft, continuous) and flags
+structural re-partitioning when the adjustments accumulate beyond a threshold (hard, infrequent).
+
+**Inertia.** The learn phase updates spec scores and entanglement weights with exponential moving averages, not raw
+session-by-session changes. This prevents runaway drift from a few unusual sessions. Structural changes (partition
+merges, splits, new Scale 3 domains) require consistent signal over many sessions before triggering. The right inertia
+is a tunable parameter, but the principle is: fast feedback on spec content quality, slow feedback on structural
+changes.
+
+```
+Session log
+    │
+    ├── Which spec sections were loaded?
+    │     → Update section relevance scores
+    │
+    ├── Did the task succeed or fail?
+    │     → Correlate with loaded context
+    │     → Update per-partition C* estimates
+    │
+    ├── Which files were actually read/edited?
+    │     → Compare to predicted partition routing
+    │     → Detect routing errors
+    │
+    └── Were specs from multiple partitions loaded together?
+          → Update cross-partition entanglement weights
+          → Flag potential domain spec promotion
+```
+
+### Orchestrate
+
+**Input:** Task description + available agents.
+**Output:** Routed task execution with auto-generated context.
+
+The orchestrate phase is the capstone: given a task, it selects the right agent(s), generates the appropriate context
+package via the serve phase, and dispatches execution. This is the original Aiome vision — a microbiome of AI agents
+coordinating through shared knowledge infrastructure — but built on the principled foundation of the previous four
+phases rather than hand-written routing tables.
+
+**Task routing.** Given a task description, orchestrate determines which agent is best suited (based on agent
+capabilities, task type, and historical success rates from the learn phase), generates an adaptive context package, and
+dispatches the task. For tasks that span multiple partitions or require multiple perspectives, orchestrate can fan out
+to multiple agents in parallel, each receiving context tailored to their portion of the work.
+
+**Agent coordination.** When multiple agents work on related tasks, orchestrate ensures they receive consistent context
+— the same partition specs, the same invariants — so their outputs are compatible. The entanglement map drives this:
+agents working on entangled partitions receive overlapping context at the boundary, preventing conflicting changes.
+
 ## CLI
 
 ```bash
 aiome init                                # analyze + generate full hierarchy
 aiome status                              # partitions, entanglement scores, stale specs
 aiome update                              # incremental regeneration for flagged specs
-aiome context "refactor the auth module"  # compute optimal context package
+aiome context "refactor the auth module"  # compute adaptive context package
 aiome context --files src/net/*.rs        # context from file paths
 aiome inspect --partition networking      # examine a specific partition's knowledge
 aiome inspect --entanglement              # coupling heatmap
+aiome inspect --quality                   # spec quality scores from learn phase
 aiome export --format claude              # generate CLAUDE.md
 aiome export --format mcp                 # generate MCP server config
 aiome watch                               # continuous: monitor commits, flag drift
+aiome learn --session <log>               # ingest agent session log, update quality scores
+aiome learn --report                      # show spec quality report, gap detections
 aiome run "implement the auth module"     # orchestrate: auto-route, auto-context, run agent
 aiome run @claude "review the PR"         # orchestrate: specific agent
 aiome run @all "design the API"           # orchestrate: all agents in parallel
@@ -291,12 +466,15 @@ aiome run @all "design the API"           # orchestrate: all agents in parallel
 `inspect`. This is already useful: a visual map of your codebase's coupling structure, the natural subsystem boundaries,
 which modules are dangerously entangled. No LLM cost. Pure graph analysis.
 
-**Phase 2** adds generation: `init` now produces the full hierarchy, `update` handles incremental regeneration, `export`
-generates tool-specific context files.
+**Phase 2** adds generation: `init` now produces the full hierarchy (Scales 1-4), `update` handles incremental
+regeneration, `export` generates tool-specific context files.
 
-**Phase 3** adds serving: `context` computes optimal packages, `watch` maintains integrity.
+**Phase 3** adds serving: `context` computes adaptive packages with task-level trimming, `watch` maintains integrity.
 
-**Phase 4** adds orchestration: `run` routes tasks to agents with auto-generated context. This is the original Aiome
+**Phase 4** adds learning: `learn` ingests agent session logs, computes spec quality scores, detects gaps, tunes bond
+dimensions. This closes the feedback loop.
+
+**Phase 5** adds orchestration: `run` routes tasks to agents with auto-generated context. This is the original Aiome
 vision — a microbiome of AI agents coordinating through shared knowledge — but now with principled infrastructure
 instead of hand-written routing tables.
 
@@ -313,37 +491,52 @@ agent that needs to make correct decisions, not a human that needs to understand
 **Not an agent framework.** AutoGen, CrewAI, LangGraph define how agents coordinate. Aiome structures the *knowledge*
 that agents depend on. Any framework can consume Aiome's output.
 
-**Not static.** The hierarchy is alive. Regenerated when structure shifts, updated when boundaries are breached, serving
-different resolutions to different tasks. It's an engine, not a snapshot.
+**Not static.** The hierarchy is alive. Regenerated when structure shifts, updated when boundaries are breached, tuned
+by the learn phase based on what agents actually need, serving different resolutions to different tasks. It's an engine,
+not a snapshot.
 
 ## Open Questions
 
 **Partition stability.** Community detection algorithms can produce different partitions on small input changes. Should
 we pin partitions and only re-detect explicitly? How do we handle files that sit on partition boundaries with high
 coupling to multiple partitions? The current design treats re-partitioning as an explicit, infrequent operation, but the
-right cadence is unknown.
+learn phase's partition quality feedback may eventually provide signal for when re-partitioning is warranted.
 
-**Cold start cost.** On `aiome init` for a 100K-line project with 12 partitions, the Generate phase makes 12+ LLM calls
-reading thousands of lines each. What's the actual cost in time and money? Can we generate incrementally with useful
-intermediate output? Should there be a "constitution-only" quick start mode?
+**Cold start cost.** On `aiome init` for a 100K-line project with 12 partitions, the Generate phase now makes many more
+LLM calls (file-level summaries for every source file, plus 12+ partition-level specs). Scale 1 file summaries are
+individually cheap but numerous. Can we generate them lazily — only for files in partitions that agents actually touch?
+Should there be a "constitution-only" quick start mode that generates Scale 4 immediately and backfills Scales 1-3 on
+demand?
 
-**Spec quality signal.** How do we know a generated spec is good? The real test is downstream: does an agent make fewer
-mistakes with the spec than without? But that requires running agent tasks end-to-end. Can we validate sooner — e.g.,
-asking the LLM "given this spec, what would you do if asked to modify file X?" and checking the answer against
-known-good approaches?
+**Spec quality signal cold start.** The learn phase needs agent session logs to compute quality scores, but at
+initialization there are no logs. The initial specs are generated with generic heuristics. How many sessions are needed
+before the learn phase provides reliable signal? Can we bootstrap with synthetic sessions — asking the LLM "given this
+spec, what would you do if asked to modify file X?" and scoring the answer against known-good approaches?
 
 **Routing ambiguity.** When a task is described only in natural language, mapping to partitions requires interpretation.
 How reliable is keyword matching? When is an LLM routing call justified? What's the failure mode when routing is wrong —
-and can the agent detect that it has insufficient context?
+and can the agent detect that it has insufficient context? The learn phase can detect routing errors after the fact (the
+agent read files outside the predicted partitions), but real-time correction during a session is harder.
 
 **Cross-language boundaries.** Tree-sitter handles many languages, but cross-language coupling (Rust backend ↔
 TypeScript frontend via API) isn't captured by import analysis. API contracts, shared type definitions, and OpenAPI
 specs could serve as cross-language entanglement signals. Are cross-language boundaries always partition boundaries?
 
-**The experiential feedback loop.** Agent session logs could improve partition quality over time — if agents
-consistently need to load specs A and B together, maybe those partitions should merge or their coupling weight should
-increase. But this creates a feedback loop between the knowledge hierarchy and the agents consuming it. How do we
-prevent runaway drift? What's the right inertia?
+**Task-level trimming calibration.** The serve phase trims within specs based on section-level relevance scores. How
+aggressive should the trimming be? Too aggressive and the agent misses relevant context that didn't keyword-match the
+task description. Too conservative and you're back to loading full specs. The learn phase can tune this threshold
+empirically, but the initial default matters for the cold-start experience.
+
+**Scale 1 quality vs. cost tradeoff.** File-level summaries are cheap per file but add up across a large codebase.
+For a 100K-line project with 500 source files, that's 500 LLM calls at init time. Are all files worth summarizing? Can
+we skip files below a complexity threshold (e.g., pure re-exports, simple constants files) and only summarize files that
+tree-sitter identifies as having non-trivial structure?
+
+**The learn phase feedback loop.** The learn phase adjusts entanglement weights and spec quality scores based on agent
+outcomes. But the agents are consuming context that Aiome provides — creating a feedback loop between the knowledge
+hierarchy and the agents consuming it. How do we prevent runaway drift? The exponential moving average provides inertia,
+but the right decay rate is unknown. Too fast and the system chases noise. Too slow and it can't adapt to genuine
+structural changes.
 
 ## Implementation
 
@@ -357,6 +550,7 @@ prevent runaway drift? What's the right inertia?
 | tokio           | Async runtime                         | Serve, Orchestrate |
 | clap            | CLI                                   | All                |
 | LLM APIs        | Spec generation                       | Generate           |
+| sled / sqlite   | Session logs, quality scores          | Learn              |
 
 The Python question: Louvain and spectral clustering have mature Python implementations (networkx, scipy) and less
 mature Rust equivalents. Phase 1 should try petgraph first. If the partitioning quality is insufficient, shell out to
@@ -364,11 +558,15 @@ Python. The analysis is a batch job — startup overhead doesn't matter.
 
 ### What's Deterministic
 
-The Analyze phase, the Serve routing, and the maintenance drift detection are all deterministic. Graph algorithms, glob
-matching, interface diffing. Fast, reliable, no LLM cost. These run on every commit without hesitation.
+The Analyze phase, the Serve routing and trimming, the maintenance drift detection, and the Learn phase's score
+aggregation are all deterministic. Graph algorithms, glob matching, interface diffing, section-level relevance scoring,
+exponential moving averages over session outcomes. Fast, reliable, no LLM cost. These run on every commit or session
+without hesitation.
 
 ### What Requires Judgment
 
-Spec generation, domain synthesis, constitution distillation, and boundary-relevance classification for ambiguous
-changes. These require an LLM. They need flexibility, interpretation, the ability to infer unstated design intent. The
-LLM does the creative work within the scaffold that the entanglement analysis provides.
+Spec generation, domain synthesis, constitution distillation, boundary-relevance classification for ambiguous changes,
+and targeted spec regeneration triggered by the Learn phase's gap detection. These require an LLM. They need
+flexibility, interpretation, the ability to infer unstated design intent. The LLM does the creative work within the
+scaffold that the entanglement analysis provides. The Learn phase tells the LLM *where* to focus; the LLM decides *what*
+to generate.
