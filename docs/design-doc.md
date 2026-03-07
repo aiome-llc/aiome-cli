@@ -76,7 +76,7 @@ Five phases, each independently valuable:
 ```
 ANALYZE ──→ GENERATE ──→ SERVE ──→ LEARN ──→ ORCHESTRATE
   │              │             │          │          │
-  │  no LLM      │  LLM        │  no LLM  │  no LLM  │  LLM
+  │  no LLM      │  LLM        │  LLM opt │  LLM opt │  LLM
   │  seconds     │  minutes    │  ms      │  async   │  per task
   │  every run   │  on init    │  every   │  every   │  on
   │              │  + drift    │  session │  session │  demand
@@ -151,7 +151,7 @@ visualizer even without the rest of the system.
 ### Generate
 
 **Input:** Partition structure + entanglement scores.  
-**Output:** Complete knowledge hierarchy across five scales.
+**Output:** Knowledge hierarchy (Scales 1–4; Scale 0 is the raw source code itself).
 
 This phase requires an LLM. It's the expensive step, run once on init and incrementally on drift. The hierarchy follows
 the renormalization group convention: Scale 0 is the finest resolution (raw code), and each higher scale integrates out
