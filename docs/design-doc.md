@@ -178,9 +178,9 @@ paragraph, typically 3-8 lines) capturing:
 - **Internal dependencies:** Which other files within the same partition it couples to, and how.
 - **Gotchas:** Anything non-obvious — implicit ordering requirements, unsafe blocks, performance-sensitive paths.
 
-File summaries are the cheapest tier to generate (short context per call, highly parallelizable) and the cheapest to
-maintain (regenerate only when the file itself changes). They fill a critical gap: when an agent is working *inside* a
-partition, the Scale 2 subsystem spec tells it about the boundary, but says nothing about the internal structure. A
+File summaries are the cheapest scale level to generate (short context per call, highly parallelizable) and the cheapest
+to maintain (regenerate only when the file itself changes). They fill a critical gap: when an agent is working *inside*
+a partition, the Scale 2 subsystem spec tells it about the boundary, but says nothing about the internal structure. A
 5,000-line partition with 20 files has its own entanglement structure — some files are tightly coupled internally (the
 state machine and the event handler), others are relatively independent (the serialization layer and the utilities).
 File summaries give the serve phase an intermediate resolution to draw from, so agents working on the state machine can
@@ -233,7 +233,7 @@ satisfice, a limited constitution forces the system to compress.
 The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes
 the task's entanglement with the codebase, loads context proportional to that entanglement, and then *trims within
 specs* based on section-level relevance to the specific task. This adaptive bond dimension is the key difference from a
-naive tier-loading approach.
+naive approach of loading entire scale levels.
 
 **Partition routing.** When file paths are provided, partition mapping is direct (glob patterns in the routing table).
 When only a natural language description is given, keyword matching against partition names and spec content provides
