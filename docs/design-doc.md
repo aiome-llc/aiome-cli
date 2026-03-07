@@ -70,19 +70,19 @@ coherence.
 
 ## Architecture
 
-Four phases, each independently valuable:
+Five phases, each independently valuable:
 
 ```
-ANALYZE ──→ GENERATE ──→ SERVE ──→ LEARN
-  │              │             │          │
-  │  no LLM      │  LLM        │  no LLM  │  no LLM
-  │  seconds     │  minutes    │  ms      │  async
-  │  every run   │  on init    │  every   │  every
-  │              │  + drift    │  session │  session
-  ▼              ▼             ▼          ▼
-Entanglement   Knowledge     Adaptive   Spec quality
-map +          hierarchy     context    scores +
-partitions     (5 scales)    packages   feedback
+ANALYZE ──→ GENERATE ──→ SERVE ──→ LEARN ──→ ORCHESTRATE
+  │              │             │          │          │
+  │  no LLM      │  LLM        │  no LLM  │  no LLM  │  LLM
+  │  seconds     │  minutes    │  ms      │  async   │  per task
+  │  every run   │  on init    │  every   │  every   │  on
+  │              │  + drift    │  session │  session │  demand
+  ▼              ▼             ▼          ▼          ▼
+Entanglement   Knowledge     Adaptive   Spec quality  Task
+map +          hierarchy     context    scores +      routing +
+partitions     (5 scales)    packages   feedback      agents
 ```
 
 ### Analyze
@@ -182,8 +182,8 @@ maintain (regenerate only when the file itself changes). They fill a critical ga
 partition, the Scale 2 subsystem spec tells it about the boundary, but says nothing about the internal structure. A
 5,000-line partition with 20 files has its own entanglement structure — some files are tightly coupled internally (the
 state machine and the event handler), others are relatively independent (the serialization layer and the utilities).
-File
-summaries give the serve phase an intermediate resolution to draw from, so agents working on the state machine can load
+File summaries give the serve phase an intermediate resolution to draw from, so agents working on the state machine can
+load
 summaries for coupled internal files without loading the entire partition.
 
 **Scale 2 — Subsystem specs.** One per partition. For each partition, the LLM reads the constituent files (guided by
@@ -230,8 +230,7 @@ satisfice, a limited constitution forces the system to compress.
 **Input:** Task description (natural language, file paths, or both).  
 **Output:** Adaptive context package at the right resolution, trimmed to task-level relevance.
 
-The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes
-the
+The serve phase is more than a routing algorithm. Given a task, it determines which partitions are involved, computes the
 task's entanglement with the codebase, loads context proportional to that entanglement, and then *trims within specs*
 based on section-level relevance to the specific task. This adaptive bond dimension is the key difference from a naive
 tier-loading approach.
@@ -308,9 +307,7 @@ The same system, different resolutions and different *sections* for different ta
 on what matters — not just at the partition level, but at the section level within each spec.
 
 **Task-conditioned partition overlay.** For tasks that span partition boundaries, the serve phase can dynamically merge
-or split the static partition structure. If a task description spans two partitions that are adjacent in the
-entanglement
-graph, serve loads a combined view. If a task is entirely internal to a large partition, serve uses the Scale 1 file
+or split the static partition structure. If a task description spans two partitions that are adjacent in the entanglement graph, serve loads a combined view. If a task is entirely internal to a large partition, serve uses the Scale 1 file
 summaries and intra-partition entanglement to load only the relevant sub-cluster. The static partitions from the Analyze
 phase are the default, but the serve phase adapts them per-task using a lightweight re-weighting of the entanglement map
 edges based on the task's semantic overlap. This runs in milliseconds — it doesn't recompute the full partition
@@ -423,6 +420,25 @@ Session log
           → Update cross-partition entanglement weights
           → Flag potential domain spec promotion
 ```
+
+### Orchestrate
+
+**Input:** Task description + available agents.
+**Output:** Routed task execution with auto-generated context.
+
+The orchestrate phase is the capstone: given a task, it selects the right agent(s), generates the appropriate context
+package via the serve phase, and dispatches execution. This is the original Aiome vision — a microbiome of AI agents
+coordinating through shared knowledge infrastructure — but built on the principled foundation of the previous four
+phases rather than hand-written routing tables.
+
+**Task routing.** Given a task description, orchestrate determines which agent is best suited (based on agent
+capabilities, task type, and historical success rates from the learn phase), generates an adaptive context package, and
+dispatches the task. For tasks that span multiple partitions or require multiple perspectives, orchestrate can fan out to
+multiple agents in parallel, each receiving context tailored to their portion of the work.
+
+**Agent coordination.** When multiple agents work on related tasks, orchestrate ensures they receive consistent context
+— the same partition specs, the same invariants — so their outputs are compatible. The entanglement map drives this:
+agents working on entangled partitions receive overlapping context at the boundary, preventing conflicting changes.
 
 ## CLI
 
